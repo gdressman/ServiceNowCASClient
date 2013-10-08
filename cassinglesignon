@@ -1,0 +1,128 @@
+gs.include("PrototypeServer");
+
+var CASSingleSignon = Class.create();
+CASSingleSignon.prototype = {
+    initialize: function() {
+        this.service = gs.getProperty("glide.servlet.uri");
+        this.caslogin = gs.getProperty("glide.authenticate.cas.loginurl");
+		this.serviceURL = this.service + 'navpage.do';
+    },
+	
+    process : function() {
+        var ticket = request.getParameter('ticket');
+        //gs.log('ticket: ' + ticket);
+        
+        if(ticket == null){
+            // did not authenticate yet, send AuthnRequest which will redirect back to us
+            relayState = this.generateRelayState();
+            //gs.log(relayState);
+            
+            var redirURL = this.caslogin + "?service=" + this.service + "&RelayState=" + relayState;
+            //gs.log("Redirecting to: " + redirURL);
+            return redirURL;
+        }
+        
+        if (ticket) {
+            var nameId = this.validate(ticket);
+            //gs.log('nameId ' + nameId);
+            if (nameId == null) {
+                this.logError("Could not extract NameID from CAS validation");
+                return "failed_missing_requirement";
+            }
+            return this.loginUser(nameId);
+            
+        } else {
+            return "failed_authentication";
+        }
+    },
+    
+    validate : function(ticket) {
+        var valURL = this.caslogin +'/validate?ticket=' + ticket + '&service=' + this.service;
+        //gs.log('valURL ' + valURL);
+        
+        var getMethod = new Packages.org.apache.commons.httpclient.methods.GetMethod(valURL);
+        //getMethod.setQueryString("include=" + include);
+        var httpClient = new GlideHTTPClient();
+        
+        var result = httpClient.executeMethod(getMethod);
+        if (result != "200"){
+            gs.log("GCSearch:: Query failed with HTTP Error " + result);
+        }
+        var response = getMethod.getResponseBodyAsString();
+        getMethod.releaseConnection();
+        
+        
+        var sections = response.split('\n');
+        if (sections.length >= 1) {
+            if (sections[0] == 'no') {
+                return 'undefined';
+            } else if (sections[0] == 'yes' &&  sections.length >= 2){
+                return sections[1];
+            }
+            
+        }
+    },
+    
+    generateRelayState : function() {
+        //Set up base url
+        var urlTokens = /^(http(s?)\:\/\/.*)\/\S+$/(this.serviceURL);
+        var baseURL = this.serviceURL;
+        if(urlTokens && urlTokens.length > 1) baseURL = urlTokens[1];
+            //gs.log("Stripping down the serviceURL: "+this.serviceURL+" to a base URL of: "+baseURL);
+        
+        //grab the request URI and query string from the request
+        var requestURI = request.getRequestURI();
+        //gs.log("requestURI: " + requestURI);
+        var qs = request.getQueryString();
+        //gs.log("Query String (qs): " + qs);
+        var uriparam = request.getParameter("uri");
+        //gs.log("URI Parameter: " + uriparam);
+        
+        if(!uriparam){
+            //No deep linking
+            //gs.log("No Deep Linking for this SAML request");
+            relayState = this.serviceURL;
+        } else {
+            //Deep Linking
+            //gs.log("There may be Deep Linking involved with this SAML request");
+            var destinationURI = "";
+            if(uriparam){
+                destinationURI += "?uri=" + encodeURIComponent(uriparam);
+            }
+            relayState = baseURL + "/nav_to.do" + destinationURI;
+        }
+        //gs.log("Generating a Relay State of: " + relayState);
+        return relayState;
+    },
+    
+    loginUser : function (nameId) {
+        if (nameId == null) {
+            return "failed_missing_requirement";
+        }
+        
+        var ugr = new GlideRecord("sys_user");
+        ugr.addQuery("user_name", nameId);
+        ugr.query();
+        if (!ugr.next()) {
+            var errorMessage = gs.getMessage("User: ") + nameId + gs.getMessage(" not found");
+            this.logError(errorMessage);
+            return "failed_authentication";
+        }
+        
+        var userName = ugr.getValue("user_name");
+        
+        var relayState = request.getParameter("RelayState");
+        if(relayState){
+            //gs.log("We will be redirecting user to the RelayState: " + relayState);
+            action.setRedirect(relayState);
+        }
+        return userName;
+    },
+    
+    logError : function (msg) {
+        var lMsg = gs.getMessage(msg);
+        gs.log(lMsg);
+        gs.addErrorMessage(lMsg);
+    }
+    
+};
