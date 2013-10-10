@@ -5,39 +5,43 @@ CASSingleSignon.prototype = {
     initialize: function() {
         this.service = gs.getProperty("glide.servlet.uri");
         this.caslogin = gs.getProperty("glide.authenticate.cas.loginurl");
-		this.serviceURL = this.service + 'navpage.do';
+        this.serviceURL = this.service + 'navpage.do';
     },
-	
+    
     process : function() {
+        var relayState= this.generateRelayState();
         var ticket = request.getParameter('ticket');
         //gs.log('ticket: ' + ticket);
         
-        if(ticket == null){
-            // did not authenticate yet, send AuthnRequest which will redirect back to us
-            relayState = this.generateRelayState();
+        if(ticket == null || ticket == ''){
             //gs.log(relayState);
-            
-            var redirURL = this.caslogin + "?service=" + this.service + "&RelayState=" + relayState;
+            // did not authenticate yet, send AuthnRequest which will redirect back to us
+            var redirURL = this.caslogin + "?service=" + relayState;
             //gs.log("Redirecting to: " + redirURL);
             return redirURL;
         }
         
         if (ticket) {
-            var nameId = this.validate(ticket);
+            var nameId = this.validate(ticket, relayState);
             //gs.log('nameId ' + nameId);
             if (nameId == null) {
                 this.logError("Could not extract NameID from CAS validation");
                 return "failed_missing_requirement";
             }
+            var uri = request.getParameter("uri");
+            if(uri){
+                uri = '/nav_to.do?uri=' + uri;
+                //gs.log("We will be redirecting user to the uri: " + uri);
+                action.setRedirect(uri);
+            }
             return this.loginUser(nameId);
-            
         } else {
             return "failed_authentication";
         }
     },
     
-    validate : function(ticket) {
-        var valURL = this.caslogin +'/validate?ticket=' + ticket + '&service=' + this.service;
+    validate : function(ticket, service) {
+        var valURL = this.caslogin +'/validate?ticket=' + ticket + '&service=' + service;
         //gs.log('valURL ' + valURL);
         
         var getMethod = new Packages.org.apache.commons.httpclient.methods.GetMethod(valURL);
@@ -50,7 +54,6 @@ CASSingleSignon.prototype = {
         }
         var response = getMethod.getResponseBodyAsString();
         getMethod.releaseConnection();
-        
         
         var sections = response.split('\n');
         if (sections.length >= 1) {
@@ -84,21 +87,20 @@ CASSingleSignon.prototype = {
             relayState = this.serviceURL;
         } else {
             //Deep Linking
-            //gs.log("There may be Deep Linking involved with this SAML request");
+            //gs.log("There may be Deep Linking involved with this CAS request");
             var destinationURI = "";
             if(uriparam){
-                destinationURI += "?uri=" + encodeURIComponent(uriparam);
+                destinationURI += "?uri=" + uriparam;
             }
-            relayState = baseURL + "/nav_to.do" + destinationURI;
+            relayState = encodeURIComponent(baseURL + "/nav_to.do" + destinationURI);
         }
         //gs.log("Generating a Relay State of: " + relayState);
         return relayState;
     },
     
     loginUser : function (nameId) {
-        if (nameId == null) {
+        if (nameId == null)
             return "failed_missing_requirement";
-        }
         
         var ugr = new GlideRecord("sys_user");
         ugr.addQuery("user_name", nameId);
@@ -110,12 +112,6 @@ CASSingleSignon.prototype = {
         }
         
         var userName = ugr.getValue("user_name");
-        
-        var relayState = request.getParameter("RelayState");
-        if(relayState){
-            //gs.log("We will be redirecting user to the RelayState: " + relayState);
-            action.setRedirect(relayState);
-        }
         return userName;
     },
     
