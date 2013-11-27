@@ -14,7 +14,9 @@ CASSingleSignon.prototype = {
         //gs.log('ticket: ' + ticket);
         
         if(ticket == null || ticket == ''){
+            //relayState = this.generateRelayState();
             //gs.log(relayState);
+            
             // did not authenticate yet, send AuthnRequest which will redirect back to us
             var redirURL = this.caslogin + "?service=" + relayState;
             //gs.log("Redirecting to: " + redirURL);
@@ -22,6 +24,7 @@ CASSingleSignon.prototype = {
         }
         
         if (ticket) {
+            
             var nameId = this.validate(ticket, relayState);
             //gs.log('nameId ' + nameId);
             if (nameId == null) {
@@ -35,6 +38,7 @@ CASSingleSignon.prototype = {
                 action.setRedirect(uri);
             }
             return this.loginUser(nameId);
+            
         } else {
             return "failed_authentication";
         }
@@ -45,9 +49,7 @@ CASSingleSignon.prototype = {
         //gs.log('valURL ' + valURL);
         
         var getMethod = new Packages.org.apache.commons.httpclient.methods.GetMethod(valURL);
-        //getMethod.setQueryString("include=" + include);
         var httpClient = new GlideHTTPClient();
-        
         var result = httpClient.executeMethod(getMethod);
         if (result != "200"){
             gs.log("GCSearch:: Query failed with HTTP Error " + result);
@@ -78,6 +80,8 @@ CASSingleSignon.prototype = {
         //gs.log("requestURI: " + requestURI);
         var qs = request.getQueryString();
         //gs.log("Query String (qs): " + qs);
+		var ticket = request.getParameter("ticket");
+        //gs.log("Ticket Parameter: " + ticket);
         var uriparam = request.getParameter("uri");
         //gs.log("URI Parameter: " + uriparam);
         
@@ -90,7 +94,9 @@ CASSingleSignon.prototype = {
             //gs.log("There may be Deep Linking involved with this CAS request");
             var destinationURI = "";
             if(uriparam){
-                destinationURI += "?uri=" + uriparam;
+                //destinationURI += "?uri=" + uriparam;
+				//drop the ticket info off
+				destinationURI += "?" + qs.replace("&ticket=" + ticket, "");
             }
             relayState = encodeURIComponent(baseURL + "/nav_to.do" + destinationURI);
         }
@@ -99,8 +105,9 @@ CASSingleSignon.prototype = {
     },
     
     loginUser : function (nameId) {
-        if (nameId == null)
+        if (nameId == null) {
             return "failed_missing_requirement";
+        }
         
         var ugr = new GlideRecord("sys_user");
         ugr.addQuery("user_name", nameId);
