@@ -14,5 +14,8 @@ Name: CASSingleSignOn
 Overrides: ExternalAuthentication  
 Description: Jasig CAS Single Sign-on Login Script  
 
+#####UI Page Settings:  
+Name: frame_bust  
+
 
 
