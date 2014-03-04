@@ -11,14 +11,16 @@ CASSingleSignon.prototype = {
     process : function() {
         var relayState= this.generateRelayState();
         var ticket = request.getParameter('ticket');
+        var requestURI = request.getRequestURI();
         //gs.log('ticket: ' + ticket);
         
         if(ticket == null || ticket == ''){
-            //relayState = this.generateRelayState();
-            //gs.log(relayState);
+            var redirURL;
+            redirURL = this.caslogin + "?service=" + relayState;
             
-            // did not authenticate yet, send AuthnRequest which will redirect back to us
-            var redirURL = this.caslogin + "?service=" + relayState;
+            if(relayState.indexOf('frame_bust.do')>=0)
+                redirURL = relayState;
+            
             //gs.log("Redirecting to: " + redirURL);
             return redirURL;
         }
@@ -31,11 +33,16 @@ CASSingleSignon.prototype = {
                 this.logError("Could not extract NameID from CAS validation");
                 return "failed_missing_requirement";
             }
-            var uri = request.getParameter("uri");
-            if(uri){
-                uri = '/nav_to.do?uri=' + uri;
-                //gs.log("We will be redirecting user to the uri: " + uri);
-                action.setRedirect(uri);
+            
+            var uri;// = request.getParameter("uri");
+            var qs = request.getQueryString();
+            //gs.log("Query String (qs): " + qs);
+            //gs.log("uri: " + request.getParameter("uri"));
+            
+            if(qs){
+                uri = '/nav_to.do?' + qs;
+                //gs.log("We will be redirecting user to: " + uri.replace(/&/g,"%26"));
+                action.setRedirect(uri.replace(/&/g,"%26"));
             }
             return this.loginUser(nameId);
             
@@ -64,7 +71,6 @@ CASSingleSignon.prototype = {
             } else if (sections[0] == 'yes' &&  sections.length >= 2){
                 return sections[1];
             }
-            
         }
     },
     
@@ -80,26 +86,24 @@ CASSingleSignon.prototype = {
         //gs.log("requestURI: " + requestURI);
         var qs = request.getQueryString();
         //gs.log("Query String (qs): " + qs);
-		var ticket = request.getParameter("ticket");
+        var ticket = request.getParameter("ticket");
+        var sysparm = request.getParameter("sysparm_userpref_module");
         //gs.log("Ticket Parameter: " + ticket);
         var uriparam = request.getParameter("uri");
         //gs.log("URI Parameter: " + uriparam);
         
-        if(!uriparam){
-            //No deep linking
-            //gs.log("No Deep Linking for this SAML request");
-            relayState = this.serviceURL;
-        } else {
-            //Deep Linking
-            //gs.log("There may be Deep Linking involved with this CAS request");
-            var destinationURI = "";
-            if(uriparam){
-                //destinationURI += "?uri=" + uriparam;
-				//drop the ticket info off
-				destinationURI += "?" + qs.replace("&ticket=" + ticket, "");
-            }
-            relayState = encodeURIComponent(baseURL + "/nav_to.do" + destinationURI);
+        //Request coming off the street.
+        if (!requestURI || requestURI.equals("") || requestURI.equals("/") || requestURI == "/navpage.do") {
+            return this.serviceURL;
         }
+        
+        if(uriparam){
+            //Deep Linking
+            relayState = encodeURIComponent(baseURL + "/nav_to.do?" + qs.replace("&ticket=" + ticket, ""));
+        }
+        else
+			relayState = this.service + "frame_bust.do?sysparm_url=" + encodeURIComponent(baseURL + "/nav_to.do?uri=" + encodeURIComponent(requestURI + "?" + qs));
+        
         //gs.log("Generating a Relay State of: " + relayState);
         return relayState;
     },
