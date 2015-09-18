@@ -1,7 +1,7 @@
 gs.include("PrototypeServer");
 
-var CASSingleSignon = Class.create();
-CASSingleSignon.prototype = {
+var CASSingleSignOn = Class.create();
+CASSingleSignOn.prototype = {
     initialize: function() {
         this.service = gs.getProperty("glide.servlet.uri");
         this.caslogin = gs.getProperty("glide.authenticate.cas.loginurl");
